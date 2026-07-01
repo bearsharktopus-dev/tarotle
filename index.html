@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tarotle</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main id="table">
+    <header class="masthead">
+      <div class="nameplate tab">TAROTLE</div>
+      <div class="dateline" id="dateline">-</div>
+    </header>
+
+    <section class="querent panel" id="querent">
+      <div class="tab label">The querent</div>
+      <div class="statements" id="statements"></div>
+    </section>
+
+    <section class="read panel" id="read">
+      <div class="tab label">Your read · say it plainly</div>
+      <p class="read-sentence" id="read-sentence"></p>
+      <div class="read-banks" id="read-banks"></div>
+    </section>
+
+    <p class="meters-lead" id="meters-lead"></p>
+    <section class="meters" id="meters"></section>
+
+    <section class="spread" id="spread"></section>
+
+    <section class="hand-area">
+      <div class="tab label hand-label">Your hand · place three</div>
+      <div class="hand" id="hand"></div>
+    </section>
+
+    <footer class="controls">
+      <button class="verb" id="deliver" disabled>Deliver the reading</button>
+      <button class="verb ghost" id="reset">New querent</button>
+    </footer>
+  </main>
+
+  <div class="scrim" id="scrim" hidden>
+    <div class="panel reveal" id="reveal"></div>
+  </div>
+
+  <script type="module" src="./app.mjs"></script>
+</body>
+</html>
