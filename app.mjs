@@ -1,12 +1,26 @@
-import { METERS, CARDS } from './data.mjs';
-import { score, analyze } from './engine.mjs';
+import { METERS, CARDS, TAGS, CARD_TEXT } from './data.mjs';
+import { score, analyze, readingCurve } from './engine.mjs';
 import { makeEncounter, quality } from './encounter.mjs';
 import { bandsFrom, AXES, LABELS } from './read.mjs';
 
 const FULL = { R: 'Relief', C: 'Conviction', L: 'Clarity', G: 'Guilt' };
 const AX = ['subject', 'turn', 'wound'];
+const BANK_LABEL = { subject: 'they came about', turn: 'what they need', wound: 'what they fear' };
 const DMIN = 0, DMAX = 12;
 const pct = (v) => `${Math.max(0, Math.min(100, ((v - DMIN) / (DMAX - DMIN)) * 100))}%`;
+
+const MAG = (a) => (a >= 5 ? 'overwhelmingly' : a >= 3 ? 'strongly' : a >= 2 ? 'moderately' : 'a little');
+function pushEffect(tag, ampMeter) {
+  const vec = TAGS[tag];
+  return METERS
+    .map((m, i) => ({ m, c: vec[i] * (m === ampMeter ? 2 : 1) }))
+    .filter((x) => x.c !== 0)
+    .sort((a, b) => Math.abs(b.c) - Math.abs(a.c));
+}
+const effectText = (tag, ampMeter) => pushEffect(tag, ampMeter)
+  .map(({ m, c }) => `${FULL[m]} ${c > 0 ? 'rises' : 'falls'} ${MAG(Math.abs(c))}`).join('  ·  ');
+const effectHTML = (tag, ampMeter) => pushEffect(tag, ampMeter)
+  .map(({ m, c }) => `<b>${FULL[m]}</b> ${c > 0 ? 'rises' : 'falls'} ${MAG(Math.abs(c))}`).join(' · ');
 
 function scanForQuality(seedOf, span = 3000) {
   for (let k = 0; k < span; k++) {
@@ -25,29 +39,38 @@ const practiceEncounter = () => { const start = Math.floor(Math.random() * 9e8) 
 const dailyKey = () => 'tarotle:' + dayNumber();
 const dailyRecord = () => { try { return JSON.parse(localStorage.getItem(dailyKey()) || 'null'); } catch { return null; } };
 
+const TUT_KEY = 'tarotle:tutorial-seen';
+const showTutorial = () => { document.getElementById('tut-scrim').hidden = false; };
+const hideTutorial = () => { document.getElementById('tut-scrim').hidden = true; try { localStorage.setItem(TUT_KEY, '1'); } catch {} };
+
 let S;
 const freshRead = () => ({ subject: null, turn: null, wound: null });
+const freshHinted = () => ({ subject: false, turn: false, wound: false });
 function load(enc, mode) {
-  S = { ...enc, slots: [null, null, null], selected: null, read: freshRead(), committed: false, mode };
+  S = { ...enc, slots: [null, null, null], selected: null, read: freshRead(), hinted: freshHinted(), committed: false, mode };
   document.getElementById('scrim').hidden = true;
   renderAll();
 }
 function clearBoard() {
-  S.slots = [null, null, null]; S.selected = null; S.read = freshRead(); S.committed = false;
+  S.slots = [null, null, null]; S.selected = null; S.read = freshRead(); S.hinted = freshHinted(); S.committed = false;
   document.getElementById('scrim').hidden = true;
   renderAll();
 }
 function init() {
   const rec = dailyRecord();
-  if (rec) return showDone(rec);
-  load(dailyEncounter(), 'daily');
+  if (rec) showDone(rec);
+  else load(dailyEncounter(), 'daily');
+  try { if (!localStorage.getItem(TUT_KEY)) showTutorial(); } catch {}
 }
+document.getElementById('how').addEventListener('click', showTutorial);
+document.getElementById('tut-close').addEventListener('click', hideTutorial);
 
 const placedIds = () => S.slots.filter(Boolean).map((s) => s.cardId);
 const reversalUsed = () => S.slots.some((s) => s && s.reversed);
 const activeTags = (slot) => (slot.reversed ? CARDS[slot.cardId].rev : CARDS[slot.cardId].up);
 const readStarted = () => AX.some((a) => S.read[a]);
 const readComplete = () => AX.every((a) => S.read[a]);
+const hintsUsed = () => AX.filter((a) => S.hinted[a]).length;
 const believedBands = () => bandsFrom(S.read.turn, S.read.wound);
 const placements = () => S.slots.map((s, i) => s && { card: s.cardId, position: i, tag: s.tag, reversed: s.reversed }).filter(Boolean);
 const resultVs = (bands) => score({ ...S.puzzle, bands }, placements());
@@ -77,10 +100,16 @@ function renderRead() {
   };
   document.getElementById('read-sentence').innerHTML =
     `You came about ${slot('subject')}. What you truly need is ${slot('turn')} - because underneath, you fear ${slot('wound')}.`;
-  document.getElementById('read-banks').innerHTML = AX.map((axis) =>
-    `<div class="bank">` + AXES[axis].map((v) =>
-      `<button class="read-chip ${S.read[axis] === v ? 'chosen' : ''}" data-axis="${axis}" data-val="${v}" ${S.committed ? 'disabled' : ''}>${LABELS[axis][v]}</button>`
-    ).join('') + `</div>`).join('');
+  document.getElementById('read-banks').innerHTML = AX.map((axis) => {
+    const hinted = S.hinted[axis];
+    const chips = AXES[axis].map((v) =>
+      `<button class="read-chip ${S.read[axis] === v ? 'chosen' : ''}" data-axis="${axis}" data-val="${v}" ${S.committed || hinted ? 'disabled' : ''}>${LABELS[axis][v]}</button>`
+    ).join('');
+    const aside = S.committed ? ''
+      : hinted ? '<span class="hint-used">revealed &#10022;</span>'
+      : `<button class="hint-btn" data-hint="${axis}">reveal (hint)</button>`;
+    return `<div class="bank-row"><div class="bank-head"><span class="bank-name">${BANK_LABEL[axis]}</span>${aside}</div><div class="bank">${chips}</div></div>`;
+  }).join('');
 }
 
 function renderMeters() {
@@ -130,8 +159,9 @@ function renderSpread() {
         </div>`;
     }
     const c = CARDS[slot.cardId];
+    const amp = pos.amplify;
     const tags = activeTags(slot).map((t) =>
-      `<span class="chip ${t === slot.tag ? 'active' : ''}" data-slot="${i}" data-tag="${t}">${t}</span>`).join('');
+      `<span class="chip ${t === slot.tag ? 'active' : ''}" data-slot="${i}" data-tag="${t}" title="${effectText(t, amp)}">${t}</span>`).join('');
     const revDisabled = reversalUsed() && !slot.reversed;
     return `
       <div class="slot filled" data-slot="${i}">
@@ -139,7 +169,10 @@ function renderSpread() {
         <span class="pos-amp">×2 ${FULL[pos.amplify]}</span>
         <div class="card ${slot.reversed ? 'reversed' : ''}" data-incard="${i}">
           <div class="card-name">${c.name}</div>
+          <div class="card-read">${slot.reversed ? CARD_TEXT[slot.cardId].rev : CARD_TEXT[slot.cardId].up}</div>
+          <div class="tags-lead">choose a meaning to push</div>
           <div class="tags">${tags}</div>
+          <div class="fx">${effectHTML(slot.tag, amp)}</div>
           <button class="reverse" data-reverse="${i}" ${revDisabled ? 'disabled' : ''}>
             ${slot.reversed ? 'reversed' : 'reverse'}
           </button>
@@ -155,9 +188,9 @@ function renderHand() {
     const c = CARDS[id];
     const out = placed.includes(id) ? 'placed-out' : '';
     const sel = S.selected === id ? 'selected' : '';
-    const tags = c.up.map((t) => `<span class="chip">${t}</span>`).join('');
+    const tags = c.up.map((t) => `<span class="chip" title="${effectText(t, null)}">${t}</span>`).join('');
     return `
-      <div class="card ${out} ${sel}" data-card="${id}">
+      <div class="card ${out} ${sel}" data-card="${id}" title="${CARD_TEXT[id].up}">
         <div class="card-name">${c.name}</div>
         <div class="tags">${tags}</div>
       </div>`;
@@ -166,9 +199,18 @@ function renderHand() {
 
 document.getElementById('read-banks').addEventListener('click', (e) => {
   if (S.committed) return;
+  const hint = e.target.closest('[data-hint]');
+  if (hint) {
+    const axis = hint.dataset.hint;
+    S.read[axis] = S.puzzle.querent.need[axis];
+    S.hinted[axis] = true;
+    renderAll();
+    return;
+  }
   const chip = e.target.closest('[data-axis]');
   if (!chip) return;
   const { axis, val } = chip.dataset;
+  if (S.hinted[axis]) return;
   S.read[axis] = S.read[axis] === val ? null : val;
   renderAll();
 });
@@ -219,16 +261,19 @@ function keyClue(axis) {
 function showReveal() {
   const need = S.puzzle.querent.need;
   const r = resultVs(S.puzzle.bands);
-  const par = S.analysis.par;
-  const ratio = Math.round((r.total / par) * 100);
-  const hits = AX.filter((a) => S.read[a] === need[a]).length;
+  const ratio = Math.round(r.total);
+  const grade = ratio >= 90 ? 'A+' : ratio >= 80 ? 'A' : ratio >= 70 ? 'B' : ratio >= 60 ? 'C' : ratio >= 50 ? 'D' : 'F';
+  const deduced = AX.filter((a) => !S.hinted[a] && S.read[a] === need[a]).length;
+  const hinted = hintsUsed();
 
-  const headline = hits === 3 ? 'You read them clean.'
-    : hits === 2 ? 'Almost. One thread slipped past you.'
-    : hits === 1 ? 'You caught a piece of them, and missed the rest.'
-    : 'You misread them entirely.';
+  const headline = ratio >= 90 ? 'You read them clean.'
+    : ratio >= 75 ? 'A strong reading, a thread or two loose.'
+    : ratio >= 60 ? 'You caught the shape of them.'
+    : ratio >= 45 ? 'A shaky reading.'
+    : 'You misread them.';
 
   const g = (axis) => {
+    if (S.hinted[axis]) return `<span class="g hint">${LABELS[axis][S.read[axis]]} &#10022;</span>`;
     const ok = S.read[axis] === need[axis];
     return ok
       ? `<span class="g ok">${LABELS[axis][S.read[axis]]}</span>`
@@ -241,22 +286,39 @@ function showReveal() {
     return `<div class="tell"><span>${axis}</span> "${c}"</div>`;
   }).join('');
 
-  const inBand = (m, i) => { const [lo, hi] = S.puzzle.bands[m]; return r.finals[i] >= lo && r.finals[i] <= hi; };
-  const pips = METERS.map((m, i) => (inBand(m, i) ? '■' : '□'));
-  const readGlyphs = AX.map((a) => (S.read[a] === need[a] ? '●' : '○')).join('');
-  const dateStr = new Date().toISOString().slice(0, 10);
-  const share = `Tarotle ${dateStr}\nread ${readGlyphs}  ·  ${ratio}% of par  ${pips.join('')}${reversalUsed() ? ' 🔄' : ''}`;
+  const beliefs = [];
+  for (const turn of AXES.turn) for (const wound of AXES.wound) {
+    const b = bandsFrom(turn, wound);
+    if (b && METERS.every((m) => b[m])) beliefs.push(b);
+  }
+  const pop = readingCurve(S.puzzle, beliefs);
+  const BINS = 10, binOf = (s) => Math.max(0, Math.min(BINS - 1, Math.floor(s / 10)));
+  const bins = new Array(BINS).fill(0);
+  for (const s of pop) bins[binOf(s)]++;
+  const maxBin = Math.max(1, ...bins);
+  const youBin = binOf(ratio);
+  const ahead = pop.length ? Math.round(100 * pop.filter((s) => s < r.total).length / pop.length) : 0;
+  const hist = Array.from({ length: BINS }, (_, k) => BINS - 1 - k).map((b) =>
+    `<div class="hbar ${b === youBin ? 'you' : ''}"><span class="hbar-lab">${b * 10}</span>`
+    + `<span class="hbar-track"><span class="hbar-fill" style="width:${Math.round((bins[b] / maxBin) * 100)}%"></span></span>`
+    + `${b === youBin ? '<span class="hbar-mark">you</span>' : ''}</div>`).join('');
 
   const pipRows = METERS.map((m, i) => {
-    const [lo, hi] = S.puzzle.bands[m]; const ok = inBand(m, i);
-    return `<div class="pip-row"><span class="${ok ? 'good' : ''}">${FULL[m]}</span>
-      <span class="${ok ? 'good' : ''}">${r.finals[i]} · ${ok ? 'in band' : `needed ${lo}-${hi}`}</span></div>`;
+    const pts = Math.round(r.perMeter[i]); const ok = pts >= 22;
+    return `<div class="pip-row"><span class="${ok ? 'good' : ''}">${FULL[m]}</span><span class="${ok ? 'good' : ''}">${pts} / 25</span></div>`;
   }).join('');
 
   const parLines = S.analysis.parSolution.placements.map((p) => {
     const pos = S.puzzle.positions[p.position];
     return `<div><b>${pos.name}</b> · ${CARDS[p.card].name}${p.reversed ? ' (reversed)' : ''} · push "${p.tag}"</div>`;
   }).join('');
+
+  const readGlyphs = AX.map((a) => (S.hinted[a] ? '✦' : S.read[a] === need[a] ? '●' : '○')).join('');
+  const spark = bins.map((v) => '▁▂▃▄▅▆▇█'[Math.min(7, Math.round((v / maxBin) * 7))]).join('');
+  const caret = bins.map((_, b) => (b === youBin ? '▲' : ' ')).join('');
+  const hintTag = hinted ? `  ·  ${hinted} hint${hinted > 1 ? 's' : ''}` : '';
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const share = `Tarotle ${dateStr}  ${grade}\nread ${readGlyphs}${hintTag}  ·  beat ${ahead}% of reads${reversalUsed() ? '  🔄' : ''}\n${spark}\n${caret}`;
 
   if (S.mode === 'daily') { try { localStorage.setItem(dailyKey(), JSON.stringify({ share })); } catch {} }
   const controls = S.mode === 'daily'
@@ -266,13 +328,17 @@ function showReveal() {
 
   document.getElementById('reveal').innerHTML = `
     <h2>${headline}</h2>
-    <p class="verdict">The read: <b>${hits} of 3</b>. The reading: <b>${ratio}% of par</b>.</p>
+    <div class="grade-line"><span class="grade">${grade}</span><span class="grade-sub">${ratio} / 100 on the reading<br>you deduced ${deduced} of 3${hinted ? ` · ${hinted} hint${hinted > 1 ? 's' : ''}` : ''}</span></div>
     <div class="graded">${graded}</div>
     <div class="tells"><div class="tells-h">the tells that gave them away</div>${tells}</div>
-    <div class="scoreline"><span class="big">${ratio}%</span><span class="par">of par on the cards</span></div>
+    <div class="curve">
+      <div class="curve-h">where you fell, of every reading you could have given</div>
+      ${hist}
+      <div class="curve-foot">ahead of <b>${ahead}%</b> of them</div>
+    </div>
     <div class="meter-pips">${pipRows}</div>
     <div class="share" id="share">${share}</div>
-    <div class="par-line"><div style="margin-bottom:6px;color:var(--ink)">Par played the cards like this:</div>${parLines}</div>
+    <div class="par-line"><div style="margin-bottom:6px;color:var(--ink)">A perfect reading played the cards like this:</div>${parLines}</div>
     ${tomorrow}
     <div class="controls">${controls}</div>`;
   document.getElementById('scrim').hidden = false;

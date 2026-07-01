@@ -1,9 +1,12 @@
 import { TAGS, CARDS } from './data.mjs';
-import { METERS, BAND_POINTS, PENALTY } from './core.mjs';
+import { METERS, BAND_POINTS, SCALE_MIN, SCALE_MAX, clamp } from './core.mjs';
 
 function scoreMeter(value, [lo, hi]) {
-  const outside = Math.max(0, lo - value, value - hi);
-  return Math.max(0, BAND_POINTS - PENALTY * outside);
+  const c = Math.round((lo + hi) / 2);
+  const v = clamp(value);
+  if (v === c) return BAND_POINTS;
+  if (v < c) return BAND_POINTS * (v - SCALE_MIN) / (c - SCALE_MIN);
+  return BAND_POINTS * (SCALE_MAX - v) / (SCALE_MAX - c);
 }
 
 function placement(cardId, reversed, tagId, position) {
@@ -110,4 +113,16 @@ function greedySolve(puzzle) {
     placements.push({ card: bestAdd.card, position: slot, tag: bestAdd.tag, reversed: false });
   }
   return { total: score(puzzle, placements).total, placements };
+}
+
+export function readingCurve(puzzle, beliefs, goodEnough = 0.9) {
+  const plays = [...enumerate(puzzle)];
+  const truth = plays.map((p) => p.result.total);
+  const pop = [];
+  for (const bands of beliefs) {
+    const believed = plays.map((p) => score({ ...puzzle, bands }, p.placements).total);
+    const cut = Math.max(...believed) * goodEnough;
+    for (let i = 0; i < plays.length; i++) if (believed[i] >= cut) pop.push(truth[i]);
+  }
+  return pop;
 }

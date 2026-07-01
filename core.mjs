@@ -7,7 +7,6 @@ export const BASELINE = 6;
 export const BAND_HALFWIDTH = 1;
 
 export const BAND_POINTS = 25;
-export const PENALTY = 5;
 
 export const clamp = (x) => Math.max(SCALE_MIN, Math.min(SCALE_MAX, x));
 export const v = (obj) => METERS.map((m) => obj[m] ?? 0);

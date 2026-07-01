@@ -32,10 +32,10 @@ export function makeEncounter(seed) {
 }
 
 export function quality(a) {
-  if (a.par !== 100) return -1;
-  if (a.skillHeadroom < 15) return -1;
-  if (a.reversalValue < 8) return -1;
-  if (a.parWinners > 10) return -1;
+  if (a.par < 99.5) return -1;
+  if (a.skillHeadroom < 12) return -1;
+  if (a.reversalValue < 4) return -1;
+  if (a.parWinners > 6) return -1;
   return a.skillHeadroom + a.reversalValue * 2 - a.parWinners;
 }
 

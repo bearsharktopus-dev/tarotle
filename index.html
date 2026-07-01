@@ -10,7 +10,10 @@
   <main id="table">
     <header class="masthead">
       <div class="nameplate tab">TAROTLE</div>
-      <div class="dateline" id="dateline">-</div>
+      <div class="masthead-right">
+        <button class="how-btn" id="how">how to play</button>
+        <div class="dateline" id="dateline">-</div>
+      </div>
     </header>
 
     <section class="querent panel" id="querent">
@@ -42,6 +45,20 @@
 
   <div class="scrim" id="scrim" hidden>
     <div class="panel reveal" id="reveal"></div>
+  </div>
+
+  <div class="scrim" id="tut-scrim" hidden>
+    <div class="panel reveal tutorial" id="tutorial">
+      <h2>How to read a stranger</h2>
+      <p class="tut-lede">A stranger sits at your table once a day and asks for a reading. Your job is to see them clearly, then give them what they came for.</p>
+      <ol class="tut-steps">
+        <li><b>Listen.</b> They tell you a few things. Most of it is cover. Read between the lines for what is really going on.</li>
+        <li><b>Name them.</b> Fill in the reading: who they came about, what they truly need, and what they are afraid of. Work it out from what they said, or spend a hint to reveal one. Naming them slides the four needles to where their heart has to go.</li>
+        <li><b>Read the cards.</b> Deal three cards, and for each, choose which of its meanings to push. Move their needles onto the need you named. You are not changing their fate, you are giving the reading they came for.</li>
+      </ol>
+      <p class="tut-foot">You are graded on the reading, F to A+, and shown where you fell against every reading you could have given. One stranger a day. Stuck? Use a hint, or play a random Practice one as often as you like.</p>
+      <div class="controls"><button class="verb" id="tut-close">Read them</button></div>
+    </div>
   </div>
 
   <script type="module" src="./app.mjs"></script>
