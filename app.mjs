@@ -6,6 +6,7 @@ import { bandsFrom, AXES, LABELS } from './read.mjs';
 const FULL = { R: 'Relief', C: 'Conviction', L: 'Clarity', G: 'Guilt' };
 const AX = ['subject', 'turn', 'wound'];
 const BANK_LABEL = { subject: 'they came about', turn: 'what they need', wound: 'what they fear' };
+const SITE = 'https://bearsharktopus-dev.github.io/tarotle/';
 const DMIN = 0, DMAX = 12;
 const pct = (v) => `${Math.max(0, Math.min(100, ((v - DMIN) / (DMAX - DMIN)) * 100))}%`;
 
@@ -314,11 +315,15 @@ function showReveal() {
   }).join('');
 
   const readGlyphs = AX.map((a) => (S.hinted[a] ? '✦' : S.read[a] === need[a] ? '●' : '○')).join('');
-  const spark = bins.map((v) => '▁▂▃▄▅▆▇█'[Math.min(7, Math.round((v / maxBin) * 7))]).join('');
-  const caret = bins.map((_, b) => (b === youBin ? '▲' : ' ')).join('');
+
+  const bar = '▁▂▃▄▅▆▇█';
+  const spark = bins.map((v, b) => {
+    const g = bar[Math.min(7, Math.round((v / maxBin) * 7))];
+    return b === youBin ? `[${g}]` : g;
+  }).join('');
   const hintTag = hinted ? `  ·  ${hinted} hint${hinted > 1 ? 's' : ''}` : '';
   const dateStr = new Date().toISOString().slice(0, 10);
-  const share = `Tarotle ${dateStr}  ${grade}\nread ${readGlyphs}${hintTag}  ·  beat ${ahead}% of reads${reversalUsed() ? '  🔄' : ''}\n${spark}\n${caret}`;
+  const share = `Tarotle ${dateStr}  ${grade}\nread ${readGlyphs}${hintTag}  ·  beat ${ahead}% of reads${reversalUsed() ? '  🔄' : ''}\n${spark}\n${SITE}`;
 
   if (S.mode === 'daily') { try { localStorage.setItem(dailyKey(), JSON.stringify({ share })); } catch {} }
   const controls = S.mode === 'daily'
